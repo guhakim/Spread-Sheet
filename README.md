@@ -1,105 +1,107 @@
 # 미니 스프레드시트 앱 (Mini Spreadsheet)
 
-5×5 그리드 기반의 브라우저 스프레드시트 앱입니다.  
-셀 클릭 → 헤더 하이라이트 → 데이터 입력 → Excel Export까지 지원합니다.
+Vanilla JS로 구현된 5×5 브라우저 스프레드시트입니다.  
+SDD(Spec-Driven Development) 방법론으로 설계되었으며, 데이터 입력부터 Excel/CSV Export까지 지원합니다.
 
 ---
 
-## 제작 과정 (Development Log)
+## SDD (Spec-Driven Development)
 
-### 1단계: 프로젝트 설계 및 요구사항 정의
-
-**목표:** 1280×720 해상도에 최적화된 미니 스프레드시트 제작
+### PRD — 제품 요구사항 (사용자 관점)
 
 | 항목 | 내용 |
 |------|------|
-| **그리드 크기** | 5행 × 5열 (A~E, 1~5) |
-| **핵심 기능** | 셀 선택/입력, 헤더 하이라이트, Excel Export |
-| **해상도 타겟** | 1280×720 |
-| **라이브러리** | SheetJS (xlsx) — Excel Export 전용 |
+| **목적** | 브라우저에서 즉시 작동하는 가벼운 바둑판형 데이터 입력 도구 |
+| **대상 사용자** | 빠른 데이터 입력이 필요한 오피스 사용자 |
+| **핵심 가치** | 설치 불필요, 직관적 조작, Google Sheets 호환 Export |
 
-**데이터 구조 설계:**
-```
-data-coordinate 속성을 좌표 식별자로 사용
-예: A1, B3, E5 등
-열(COLUMNS) = ['A','B','C','D','E']
-행(ROW_COUNT) = 5
-```
+#### User Stories
+1. 셀을 클릭하면 좌표(`C3`)를 상단에 표시하고 해당 행/열 헤더를 하이라이트한다
+2. 셀을 더블클릭하여 데이터를 입력/수정한다
+3. `Enter` / 방향키(`↑↓←→`)로 연속 입력한다
+4. Export 버튼 하나로 `.xlsx` 또는 `.csv` 파일을 다운로드한다
+5. Google Sheets에 가져올 때 한글 깨짐·칸 밀림 없이 복원된다
 
 ---
 
-### 2단계: HTML 구조 작성 (`index.html`)
+### SRS — 소프트웨어 요구사항 (기능 조건)
 
-- `<head>`에서 CDN으로 SheetJS 로드
-- 상단 헤더 영역: 현재 셀 좌표 표시(`#current-cell-id`) + Excel Export 버튼
-- 메인 영역: `#grid` 컨테이너 (JS로 동적 생성)
-- `<body>` 최하단에 `app.js` 로드 (DOM 파싱 완료 보장)
+#### UI 구성
+```
+┌────────────────────────────────────────────┐
+│  [Cell: A1]              [Excel Export]    │  ← 상단 툴바
+├────┬────┬────┬────┬────┬────┤
+│    │ A  │ B  │ C  │ D  │ E  │              │  ← 열 헤더
+├────┼────┼────┼────┼────┼────┤
+│ 1  │    │    │    │    │    │              │
+├────┼────┼────┼────┼────┼────┤
+│ 2  │    │    │    │    │    │              │  ← 데이터 셀
+├────┼────┼────┼────┼────┼────┤
+│ 3  │    │    │    │    │    │
+└────┴────┴────┴────┴────┴────┘
+  ↑ 행 헤더
+```
+
+#### 인터랙션 조건
+1. **셀 클릭** → `.active` 클래스(파란 테두리) 부여, 기존 활성화 제거
+2. **좌표 연동** → 상단 표시창을 `C3` 형식으로 갱신, 매칭되는 행/열 헤더에 `.highlight` 부여
+3. **값 입력** → 더블클릭 시 편집 모드 진입, `blur` 또는 `Enter` 시 저장
+4. **Export** → `spreadsheet.xlsx` (`xlsx`) 또는 BOM 포함 `.csv` (`csv` 브랜치) 다운로드
 
 ---
 
-### 3단계: CSS 레이아웃 (`style.css`)
+### TRD — 기술 요구사항 (구현 구조)
 
-**1280×720 방어선:**
-```css
-.app-container {
-    width: 1280px;
-    height: 720px;
-}
+#### 상태(State) 설계 — Single Source of Truth
+
+```javascript
+// 1. 그리드 규격
+const CONFIG = { ROWS: 5, COLS: 5 }; // A~E, 1~5
+
+// 2. 활성화 상태
+let activeCell = { row: null, col: null };
+
+// 3. 데이터 저장소 (2차원 배열)
+let spreadsheetData = Array.from({ length: CONFIG.ROWS }, () =>
+  Array(CONFIG.COLS).fill("")
+);
 ```
 
-**그리드 구조 (6열):**
-```
-grid-template-columns: 60px repeat(5, minmax(150px, 1fr))
-→ 행번호(60px) + 데이터 5열(각 150px~가변)
-```
+#### 아키텍처 결정 사항
 
-**핵심 스타일:**
-- `.cell-input:focus` — 파란색 inset box-shadow로 포커스 강조
-- `.active-header` — 선택된 행/열 헤더를 진한 파란색(`#1e3a8a`)으로 하이라이트
+| 결정 | 적용 | 근거 |
+|------|------|------|
+| **렌더링 방식** | JS 동적 생성 (`createElement`) | HTML 하드코딩 배제, 유지보수성 |
+| **이벤트 처리** | 개별 리스너 (본 프로젝트) | 직관적 학습, 작은 그리드에 적합 |
+| **Export 포맷** | SheetJS (`xlsx`) | Google Sheets 호환성, 한글 보존 |
 
----
+#### 함수 모듈화 (1함수 1역할)
 
-### 4단계: JavaScript 비즈니스 로직 (`app.js`)
+| 함수 | 역할 | 트리거 |
+|------|------|--------|
+| `createGrid()` | 5×5 그리드 동적 생성 | `DOMContentLoaded` |
+| `updateFocusedCell()` | 상단 좌표 표시 갱신 | 셀 `focus` |
+| `highlightHeaders()` | 행/열 헤더 하이라이트 | 셀 `focus` |
+| `collectGridData()` | 2차원 배열 데이터 수집 | Export 호출 |
+| `exportSpreadsheet()` | Excel 파일 생성 + 다운로드 | 버튼 `click` |
 
-**원칙: 1함수 1역할 (각 함수는 하나의 책임만 수행)**
+#### 셀 이동 바인딩
 
-| 함수 | 역할 |
-|------|------|
-| `createGrid()` | 5×5 그리드 UI 동적 생성 |
-| `updateFocusedCell()` | 선택된 셀 좌표를 상단 UI에 표시 |
-| `highlightHeaders()` | 선택된 셀에 해당하는 행/열 헤더 강조 |
-| `collectGridData()` | 2차원 배열로 데이터 수집 |
-| `exportSpreadsheet()` | SheetJS로 Excel 파일 생성 및 다운로드 |
-
-**셀 이동 기능 (v1.1 추가):**
-
-| 키 | 동작 | 경계 처리 |
+| 키 | 이동 | 경계 처리 |
 |-----|------|-----------|
-| `↓` / `Enter` | 다음 행 (같은 열) | 마지막 행 → 첫 행 순환 |
-| `↑` | 이전 행 (같은 열) | 첫 행 → 마지막 행 순환 |
-| `→` | 다음 열 (같은 행) | 마지막 열 → 첫 열 순환 |
-| `←` | 이전 열 (같은 행) | 첫 열 → 마지막 열 순환 |
-
-**데이터 흐름:**
-```
-사용자 입력 → input.value 저장
-                    ↓
-버튼 클릭 → collectGridData() → 2차원 배열
-                    ↓
-          SheetJS (aoa_to_sheet → writeFile)
-                    ↓
-          spreadsheet.xlsx 다운로드
-```
+| `↓` / `Enter` | 다음 행 (같은 열) | 마지막 → 첫 행 wrap |
+| `↑` | 이전 행 (같은 열) | 첫 → 마지막 행 wrap |
+| `→` | 다음 열 (같은 행) | 마지막 → 첫 열 wrap |
+| `←` | 이전 열 (같은 행) | 첫 → 마지막 열 wrap |
 
 ---
 
-### 5단계: 검증 및 테스트
+## QA 체크리스트
 
-- ✅ JavaScript 문법 검사 (`node --check`) 통과
-- ✅ DOM 로드 순서 (script 하단 배치) 정상
-- ✅ XLSX CDN 로드 후 Export 실행 구조
-- ✅ `focus` 이벤트 기반 헤더 하이라이트 정상 동작
-- ✅ 방향키 셀 이동 및 경계 순환 정상
+- [ ] **좌표 정확도**: 1행 2열(`col=2, row=1`) 클릭 시 상단에 `C1` 표시
+- [ ] **하이라이트 잔상 제거**: `A1` → `D5` 순차 클릭 시 A행·1열 하이라이트 완전 제거
+- [ ] **데이터 지속성**: 셀에 값 입력 → 다른 셀 이동 → 복귀 시 값 보존
+- [ ] **Export 동작**: 버튼 클릭 시 `spreadsheet.xlsx` 파일 다운로드
 
 ---
 
@@ -107,29 +109,26 @@ grid-template-columns: 60px repeat(5, minmax(150px, 1fr))
 
 ```
 spreadsheet-app/
-├── index.html      # HTML 구조 (헤더 + 그리드 영역)
-├── style.css       # 1280×720 최적화 레이아웃
-├── app.js          # 비즈니스 로직 (1함수 1역할)
-└── README.md       # 제작 과정 기록
+├── index.html    # HTML 구조 (툴바 + 그리드 영역)
+├── style.css     # 1280×720 최적화 레이아웃
+├── app.js        # 비즈니스 로직 (5개 함수 모듈화)
+└── README.md     # SDD 명세 + 사용 가이드
 ```
 
 ## 사용 방법
 
 ```bash
-# 브라우저로 열기
 open index.html
-# 또는
-open -a "Google Chrome" index.html
 ```
 
-1. 셀을 클릭하면 상단에 좌표가 표시되고 해당 행/열 헤더가 하이라이트됩니다
-2. 텍스트를 입력하고 `Enter` / 방향키로 셀을 이동합니다
-3. **Excel Export** 버튼을 누르면 `spreadsheet.xlsx` 파일이 다운로드됩니다
+1. 셀을 클릭하여 좌표와 헤더 하이라이트 확인
+2. 데이터 입력 후 `Enter` / `↑↓←→` 로 셀 이동
+3. **Excel Export** 버튼 → `spreadsheet.xlsx` 다운로드
 
 ## Tech Stack
 
-- **Vanilla HTML/CSS/JS** — 순수 웹 기술만 사용
-- **SheetJS (xlsx)** — Excel 파일 생성 및 다운로드
+- **Vanilla HTML / CSS / JS** — 순수 웹 기술
+- **SheetJS (xlsx)** — Excel 파일 생성
 
 ## License
 
