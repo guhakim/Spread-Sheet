@@ -3,7 +3,7 @@
 Vanilla JS로 구현된 5×5 브라우저 스프레드시트입니다.  
 SDD(Spec-Driven Development) 방법론으로 설계되었으며, 데이터 입력부터 Excel/CSV Export까지 지원합니다.
 
-file:///Users/guhakim/spreadsheet-app/index.html
+https://guhakim.github.io/Spread-Sheet/
 ---
 
 ## SDD (Spec-Driven Development)
